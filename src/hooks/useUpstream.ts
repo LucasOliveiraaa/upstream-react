@@ -178,6 +178,19 @@ export const useUpstreamHook = <T = any, E = any>(
     });
 
     useIsomorphicEffect(() => {
+        const cached = store.get<T>(key);
+
+        // If there's a fallback but there's not a cached value, 
+        // set the fallback as the cannonical value
+        if (isUndefined(cached) && !isUndefined(fallback) && Boolean(key)) {
+            store.set(key, fallback);
+            cachedRef.current = fallback;
+        } else {
+            cachedRef.current = cached;
+        }
+    }, [key, fallback])
+
+    useIsomorphicEffect(() => {
         if (!key) return;
 
         const cached = cachedRef.current;
@@ -210,7 +223,7 @@ export const useUpstreamHook = <T = any, E = any>(
 
             unsubscribe();
         }
-    }, [key, refetchOnFocus, refetchOnReconnect]);
+    }, [key, refetchOnMount, refetchOnFocus, refetchOnReconnect]);
 
     // Refetch Interval pooling
     useIsomorphicEffect(() => {
