@@ -29,6 +29,7 @@ export interface Store {
     config: StoreConfig;
     parent?: Store;
     children: Store[];
+    upstreamUUIDs: Set<string>;
 
     teardown: (() => void)[];
 

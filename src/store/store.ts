@@ -77,6 +77,7 @@ export class BaseStore implements Store {
     config: StoreConfig;
     _parent?: Store;
     children: Store[] = [];
+    upstreamUUIDs: Set<string> = new Set();
 
     teardown: (() => void)[] = [];
 
@@ -91,8 +92,13 @@ export class BaseStore implements Store {
         }
 
         if (!isUndefined(parent)) {
+            if(parent.upstreamUUIDs.has(this.UUID)) {
+                console.warn(`Circular store dependency detected when setting parent of store ${this.name} to ${parent.name}. Operation aborted to prevent infinite loops.`)
+                return;
+            }
+
             if (parent.config.isolate) {
-                console.warn(`Store ${parent.name} is isolated, meaning that it can't be set as parent of store ${this.name}`);
+                console.warn(`Store ${parent.name} is isolated, meaning it can't have children.`);
                 return;
             }
 
@@ -101,6 +107,9 @@ export class BaseStore implements Store {
             }
 
             parent.children.push(this);
+
+            this.upstreamUUIDs = new Set(parent.upstreamUUIDs);
+            this.upstreamUUIDs.add(parent.UUID);
         }
 
         this._parent = parent;
