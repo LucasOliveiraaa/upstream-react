@@ -1,12 +1,20 @@
 import { isUndefined } from "./helpers";
 
-const table = new WeakMap<object, string>();
-let counter = 0;
+const contexts: Record<string, {
+    counter: number,
+    table: WeakMap<object, string>
+}> = {};
 
 const getType = (v: any) => Object.prototype.toString.call(v);
 const isType = (type: string, target: string) => type === `[object ${target}]`
 
-export function stableStringify(data: any): string {
+export function stableStringify(contextUUID: string, data: any): string {
+    if(!(contextUUID in contexts)) {
+        contexts[contextUUID] = { counter: 1, table: new WeakMap() };
+    }
+
+    let { counter, table } = contexts[contextUUID]!;
+
     const type = typeof data;
     const typeName = getType(data);
     const isDate = isType(typeName, "Date");
@@ -23,7 +31,7 @@ export function stableStringify(data: any): string {
         if (Array.isArray(data)) {
             result = "Arr"
             for (let i = 0; i < data.length; i++)
-                result += stableStringify(data[i]) + ","
+                result += stableStringify(contextUUID, data[i]) + ","
             table.set(data, result);
             return result;
         }
@@ -33,7 +41,7 @@ export function stableStringify(data: any): string {
             let key;
             while (!isUndefined((key = keys.pop() as string))) {
                 if (!isUndefined(data[key])) {
-                    result += `${key}:${stableStringify(data[key])},`
+                    result += `${key}:${stableStringify(contextUUID, data[key])},`
                 }
             }
             table.set(data, result);

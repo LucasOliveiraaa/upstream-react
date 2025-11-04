@@ -2,7 +2,7 @@ import { isConfiguration, isFunction } from "./helpers";
 import type { Fetcher, Key, UpstreamConfig } from "../types";
 import { stableStringify } from "./hash";
 
-export function parseKey(key: Key): [string, Key] {
+export function parseKey(contextUUID: string, key: Key): [string, Key] {
     try {
         key = isFunction(key) ? key() : key;
     } catch (e) {
@@ -11,7 +11,7 @@ export function parseKey(key: Key): [string, Key] {
 
     if ((Array.isArray(key) && key.length === 0) || !key) return ["", key];
 
-    return [stableStringify(key), key];
+    return [stableStringify(contextUUID, key), key];
 }
 
 export function parseArgs<T = any>(args: (Key | T | UpstreamConfig | Fetcher<T>)[]) {

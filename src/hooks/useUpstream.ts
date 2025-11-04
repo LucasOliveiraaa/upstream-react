@@ -58,11 +58,10 @@ export const useUpstreamHook = <T = any, E = any>(
         refetchOnMount,
     } = resolvedConfig;
 
-        refetchWhenStale,
-        staleTimeSpan
-    } = useUpstreamConfig(config);
+    const store = _store || globalStore;
+    const { fetches } = store;
 
-    const [key, arg] = parseKey(_key);
+    const [key, arg] = parseKey(store.UUID, _key);
 
     const keyRef = useRef(key);
     const fetcherRef = useRef(fetcher || scopeFetcher);
