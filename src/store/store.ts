@@ -1,7 +1,7 @@
 "use client";
 
 import { isNull, isUndefined, clone as cloneValue } from "../utils/helpers";
-import type {
+import {
     StoreProvider,
     Store,
     StoreConfig,
@@ -12,6 +12,7 @@ import type {
     ExtendedStoreConfig
 } from "../types";
 import { generateUUID } from "../utils/hash";
+import { listenForFocus, listenForReconnect, listenForWindowSync } from "../utils/web";
 
 /**
  * Creates a new, empty store
@@ -114,6 +115,22 @@ export class BaseStore implements Store {
         this.name = name;
 
         parent?.children.push(this);
+
+        listenForFocus(() => {
+            for(let key in this.handlers) {
+                this.notifyHandlers(key, EventTypes.Focus);
+            }
+        });
+
+        listenForReconnect(() => {
+            for(let key in this.handlers) {
+                this.notifyHandlers(key, EventTypes.Reconnect);
+            }
+        });
+
+        listenForWindowSync((key, value) => {
+            this.set(key, value);
+        });
     }
 
     get<T>(key: string): T | undefined {
