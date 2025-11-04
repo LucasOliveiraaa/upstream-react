@@ -29,6 +29,8 @@ export const useUpstreamHook = <T = any, E = any>(
     fetcher?: Fetcher<T>,
     config?: UpstreamConfig
 ): UpstreamResponse<T, E> => {
+    const resolvedConfig = useUpstreamConfig(config);
+
     const {
         store: _store,
 
@@ -54,6 +56,7 @@ export const useUpstreamHook = <T = any, E = any>(
         refetchOnFocus,
         refetchOnReconnect,
         refetchOnMount,
+    } = resolvedConfig;
 
         refetchWhenStale,
         staleTimeSpan
@@ -67,19 +70,11 @@ export const useUpstreamHook = <T = any, E = any>(
     const mountedRef = useRef(false);
     const unmountedRef = useRef(false);
 
-    const store = _store || globalStore;
-    const { fetches } = store;
-
-    let cached = store.get<T>(key);
-
-    // If there's a fallback but there's not a cached value, 
-    // set the fallback as the cannonical value
-    if (isUndefined(cached) && !isUndefined(fallback) && Boolean(key)) {
-        store.set(key, fallback);
-        cached = fallback;
-    }
+    const configRef = useRef(resolvedConfig);
+    const cachedRef = useRef(store.get<T>(key))
 
     const [value, setValue] = useState<T | undefined>(() => {
+        const cached = cachedRef.current;
         if (!isUndefined(cached)) return cached;
         if (!isUndefined(fallback)) return cached ?? fallback;
         if (!isUndefined(cached) && mountedRef.current) return cached;
@@ -89,7 +84,7 @@ export const useUpstreamHook = <T = any, E = any>(
         return undefined;
     });
     const [error, setError] = useState<E | undefined>();
-    const [isFetching, setIsFetching] = useState<boolean>(fetcherRef.current !== undefined && cached === undefined);
+    const [isFetching, setIsFetching] = useState<boolean>(fetcherRef.current !== undefined && cachedRef.current === undefined);
 
     // This key allows the user to know if the current key-value could be
     // store by a parsistent store. This is a guess, the real source is
@@ -123,17 +118,20 @@ export const useUpstreamHook = <T = any, E = any>(
             }
         }
 
+        const cached = cachedRef.current;
+        const config = configRef.current;
+        const currentFetcher = fetcherRef.current;
         setIsFetching(true);
 
         try {
-            fetches[key] = [fetcherRef.current(arg), Date.now()];
+            fetches[key] = [currentFetcher(arg), Date.now()];
 
-            if (!isUndefined(fetchTimeout) && isUndefined(cached)) {
+            if (!isUndefined(config.fetchTimeout) && isUndefined(cached)) {
                 setTimeout(() => {
                     if (!isUndefined(fetches[key][0])) {
                         onLoadingSlow?.(key);
                     }
-                }, Math.max(fetchTimeout, 1));
+                }, Math.max(config.fetchTimeout, 1));
             }
 
             let result: T = await fetches[key][0];
@@ -144,8 +142,8 @@ export const useUpstreamHook = <T = any, E = any>(
             fetches[key][0] = undefined;
             setIsFetching(false);
 
-            if ((refetchWhenStale ?? true) && isUndefined(refetchInterval)) {
-                setTimeout(refetch, Math.max(staleTimeSpan ?? 30000, 1))
+            if ((config.refetchWhenStale ?? true) && isUndefined(config.refetchInterval)) {
+                setTimeout(refetch, Math.max(config.staleTimeSpan ?? 30000, 1))
             }
             return result;
         } catch (err: unknown) {
@@ -156,7 +154,7 @@ export const useUpstreamHook = <T = any, E = any>(
                     }, errorRetryInterval ?? 2000)
                 })
             }
-            for (let i = 0; i < (errorRetries ?? 0); i++) {
+            for (let i = 0; i < (config.errorRetries ?? 0); i++) {
                 onErrorRetry?.(err as E, key, refetch);
                 await awaitCompletion();
             }
@@ -177,10 +175,13 @@ export const useUpstreamHook = <T = any, E = any>(
 
     useIsomorphicEffect(() => {
         fetcherRef.current = fetcher;
+        configRef.current = resolvedConfig;
     });
 
     useIsomorphicEffect(() => {
         if (!key) return;
+
+        const cached = cachedRef.current;
 
         unmountedRef.current = false;
         mountedRef.current = true;
@@ -257,7 +258,7 @@ export const useUpstreamHook = <T = any, E = any>(
         },
         {
             error,
-            isInitial: (isUndefined(cached) && !isUndefined(fetcherRef.current)),
+            isInitial: (isUndefined(cachedRef.current) && !isUndefined(fetcherRef.current)),
             isFetching,
             refetch,
 
