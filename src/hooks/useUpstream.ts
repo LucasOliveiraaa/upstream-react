@@ -233,7 +233,7 @@ export const useUpstreamHook = <T = any, E = any>(
 
         const pool = () => {
             if (!isUndefined(refetchInterval) && timer !== -1) {
-                setTimeout(execute, Math.max(refetchInterval, 1));
+                timer = setTimeout(execute, Math.max(refetchInterval, 1));
             }
         }
 
