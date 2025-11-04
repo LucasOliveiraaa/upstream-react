@@ -93,7 +93,7 @@ export const useUpstreamHook = <T = any, E = any>(
             let isPersistent = (store: Store) => {
                 if (store.config.persistent) return true;
                 if (!isUndefined(store.parent)) return isPersistent(store.parent);
-                return true;
+                return false;
             }
 
             return isPersistent(store);
