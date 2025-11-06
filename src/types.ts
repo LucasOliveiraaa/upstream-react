@@ -79,7 +79,7 @@ export type UpstreamResponse<T = any, E = any> = [
     }
 ]
 
-export type SetActionArg<T> = T | ((prev: T | undefined) => T);
+export type SetActionArg<T> = T | ((prev: T | undefined) => T | undefined) | undefined;
 export type SetAction<T> = (newValue: SetActionArg<T>) => void;
 
 export type Arg = string | any[] | object | false | null;

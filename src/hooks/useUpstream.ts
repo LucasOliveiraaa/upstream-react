@@ -264,7 +264,7 @@ export const useUpstreamHook = <T = any, E = any>(
             if (!key) return;
 
             const updated = isFunction(newValue)
-                ? (newValue as (old: T | undefined) => T)(value)
+                ? (newValue as (old: T | undefined) => T | undefined)(value)
                 : newValue;
             store.set(key, updated);
         },
