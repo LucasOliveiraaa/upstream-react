@@ -1,6 +1,6 @@
 {
   "name": "upstream-react",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Hierarchical reactive stores for React",
   "packageManager": "pnpm@10.18.3",
   "keywords": [
