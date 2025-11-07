@@ -1,4 +1,4 @@
-import type { UpstreamConfig, EventHandlerCallback, EventTypes } from "../types";
+import type { UpstreamConfig, EventHandlerCallback, EventTypes, HierarchicalStore } from "../types";
 
 export const isWindowDefined = typeof window != "undefined";
 export const isDocumentDefined = typeof document != "undefined";
@@ -33,6 +33,17 @@ export const isConfiguration = (value: any): value is UpstreamConfig => {
             "staleTimeSpan" in value
         )
     );
+}
+
+export const isHierarchicalStore = (value: any): value is HierarchicalStore => {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        "upstreamUUIDs" in value &&
+        value.upstreamUUIDs instanceof Set &&
+        "children" in value &&
+        Array.isArray(value.children)
+    )
 }
 
 const getType = (v: any) => Object.prototype.toString.call(v);

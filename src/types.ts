@@ -18,20 +18,13 @@ export interface StoreProvider {
 }
 
 export interface Store {
-    handlers: Record<string, EventHandlerCallback[]>;
     fetches: Record<string, [FetcherResponse<any>, number]>;
-    subscribers: Record<string, MutationObserver[]>;
 
     UUID: string;
     name: string;
 
-    provider: StoreProvider;
     config: StoreConfig;
     parent?: Store;
-    children: Store[];
-    upstreamUUIDs: Set<string>;
-
-    teardown: (() => void)[];
 
     get<T>(key: string): T | undefined;
     
@@ -39,7 +32,6 @@ export interface Store {
     setAndDontNotify<T>(key: string, value: T): T | undefined;
 
     delete(key: string): void;
-    has(key: string): boolean;
 
     clone(): Store;
     diverge(config?: ExtendedStoreConfig): Store;
@@ -51,6 +43,11 @@ export interface Store {
 
     serialize(): string;
 }
+
+export type HierarchicalStore = Store & {
+    upstreamUUIDs: Set<string>;
+    children: Store[];
+};
 
 export type Refetcher<T> = () => Promise<T | undefined>;
 

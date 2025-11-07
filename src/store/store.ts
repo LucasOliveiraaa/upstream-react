@@ -1,6 +1,6 @@
 "use client";
 
-import { isNull, isUndefined, clone as cloneValue } from "../utils/helpers";
+import { isNull, isUndefined, clone as cloneValue, isHierarchicalStore } from "../utils/helpers";
 import {
     StoreProvider,
     Store,
@@ -91,7 +91,7 @@ export class BaseStore implements Store {
             return;
         }
 
-        if (!isUndefined(parent)) {
+        if (isHierarchicalStore(parent)) {
             if(parent.upstreamUUIDs.has(this.UUID)) {
                 console.warn(`Circular store dependency detected when setting parent of store ${this.name} to ${parent.name}. Operation aborted to prevent infinite loops.`)
                 return;
@@ -102,7 +102,7 @@ export class BaseStore implements Store {
                 return;
             }
 
-            if (!isUndefined(this._parent) && parent.UUID !== this._parent?.UUID) {
+            if (isHierarchicalStore(this._parent) && parent.UUID !== this._parent?.UUID) {
                 this._parent.children = this._parent.children.filter(pred => pred.UUID !== this.UUID);
             }
 
@@ -123,7 +123,8 @@ export class BaseStore implements Store {
         this.UUID = generateUUID();
         this.name = name;
 
-        parent?.children.push(this);
+        if(isHierarchicalStore(parent))
+            parent.children.push(this);
 
         listenForFocus(() => {
             for(let key in this.handlers) {
