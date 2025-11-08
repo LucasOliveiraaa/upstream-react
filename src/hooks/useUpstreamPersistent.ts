@@ -1,10 +1,9 @@
 import { createStoreFromStorage } from "../store/store";
-import { isWindowDefined } from "../utils/helpers";
 import { hookMiddleware } from "./middleware";
 
 let p;
 
-if (isWindowDefined) {
+if (typeof window !== "undefined") {
     p = createStoreFromStorage(
         window.localStorage,
         {
