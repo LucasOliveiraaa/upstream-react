@@ -1,3 +1,5 @@
+"use client";
+
 import { isDocumentDefined, isNull, isUndefined, isWindowDefined } from "./helpers";
 
 const [connectWindowEvent, disconnectWindowEvent] =

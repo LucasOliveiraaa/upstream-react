@@ -1,3 +1,5 @@
+"use client";
+
 import { isUndefined } from "./helpers";
 
 const contexts: Record<string, {

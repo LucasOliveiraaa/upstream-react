@@ -1,3 +1,5 @@
+"use client";
+
 import { isConfiguration, isFunction } from "./helpers";
 import type { Fetcher, Key, UpstreamConfig } from "../types";
 import { stableStringify } from "./hash";

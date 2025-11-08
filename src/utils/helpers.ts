@@ -1,4 +1,6 @@
-import type { UpstreamConfig, EventHandlerCallback, EventTypes, HierarchicalStore } from "../types";
+"use client";
+
+import type { UpstreamConfig, HierarchicalStore } from "../types";
 
 export const isWindowDefined = typeof window != "undefined";
 export const isDocumentDefined = typeof document != "undefined";
