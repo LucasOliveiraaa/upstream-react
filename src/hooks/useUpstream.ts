@@ -9,6 +9,7 @@ import {
     Key,
     SetActionArg,
     Store,
+    type SetAction,
 } from "../types";
 import {
     isFunction,
@@ -258,16 +259,25 @@ export const useUpstreamHook = <T = any, E = any>(
         }
     }, [refetchInterval, refetchWhenHidden, refetchWhenOffline, key]);
 
-    return [
-        value,
-        (newValue: SetActionArg<T>) => {
+    const setAction = useCallback<SetAction<T>>(
+        (newValue?: SetActionArg<T>) => {
             if (!key) return;
 
             const updated = isFunction(newValue)
                 ? (newValue as (old: T | undefined) => T | undefined)(value)
                 : newValue;
-            store.set(key, updated);
+
+            if (isUndefined(updated))
+                store.delete(key);
+            else
+                store.set(key, updated);
         },
+        [key, store, value]
+    );
+
+    return [
+        value,
+        setAction,
         {
             error,
             isInitial: (isUndefined(cachedRef.current) && !isUndefined(fetcherRef.current)),

@@ -183,6 +183,9 @@ export class BaseStore implements Store {
     }
 
     delete(key: string): void {
+        if(!isUndefined(this.parent) && !this.config.isolate && (this.config.syncUp ?? true)) {
+            this.parent.delete(key); // Purge from parent store as well
+        }
         this.provider.delete(key);
     }
 
