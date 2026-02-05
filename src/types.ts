@@ -17,6 +17,15 @@ export interface StoreProvider {
     keys(): IterableIterator<string>
 }
 
+export interface Wave {
+    type: string,
+    payload: any,
+    source: Store,
+    blockWave: boolean,
+}
+
+export type WaveObserver = (wave: Wave) => void;
+
 export interface Store {
     fetches: Record<string, [FetcherResponse<any>, number]>;
 
@@ -32,6 +41,12 @@ export interface Store {
     setAndDontNotify<T>(key: string, value: T): T | undefined;
 
     delete(key: string): void;
+
+    wave(type: string, payload: any): void;
+    wave(wave: Wave): void;
+
+    dispatchWave(wave: Wave): void;
+    observeWave(observer: WaveObserver): () => void;
 
     clone(): Store;
     diverge(config?: ExtendedStoreConfig): Store;

@@ -9,7 +9,9 @@ import {
     MutationObserver,
     Unsubscriber,
     EventTypes,
-    ExtendedStoreConfig
+    ExtendedStoreConfig,
+    type Wave,
+    type WaveObserver
 } from "../types";
 import { generateUUID } from "../utils/hash";
 import { listenForFocus, listenForReconnect, listenForWindowSync } from "../utils/web";
@@ -69,6 +71,7 @@ export class BaseStore implements Store {
     handlers: Record<string, EventHandlerCallback[]> = {};
     fetches: Record<string, [any, number]> = {};
     subscribers: Record<string, MutationObserver[]> = {};
+    waveObservers: WaveObserver[] = [];
 
     UUID: string;
     name: string;
@@ -92,7 +95,7 @@ export class BaseStore implements Store {
         }
 
         if (isHierarchicalStore(parent)) {
-            if(parent.upstreamUUIDs.has(this.UUID)) {
+            if (parent.upstreamUUIDs.has(this.UUID)) {
                 console.warn(`Circular store dependency detected when setting parent of store ${this.name} to ${parent.name}. Operation aborted to prevent infinite loops.`)
                 return;
             }
@@ -123,17 +126,17 @@ export class BaseStore implements Store {
         this.UUID = generateUUID();
         this.name = name;
 
-        if(isHierarchicalStore(parent))
+        if (isHierarchicalStore(parent))
             parent.children.push(this);
 
         listenForFocus(() => {
-            for(let key in this.handlers) {
+            for (let key in this.handlers) {
                 this.notifyHandlers(key, EventTypes.Focus);
             }
         });
 
         listenForReconnect(() => {
-            for(let key in this.handlers) {
+            for (let key in this.handlers) {
                 this.notifyHandlers(key, EventTypes.Reconnect);
             }
         });
@@ -183,7 +186,7 @@ export class BaseStore implements Store {
     }
 
     delete(key: string): void {
-        if(!isUndefined(this.parent) && !this.config.isolate && (this.config.syncUp ?? true)) {
+        if (!isUndefined(this.parent) && !this.config.isolate && (this.config.syncUp ?? true)) {
             this.parent.delete(key); // Purge from parent store as well
         }
         this.provider.delete(key);
@@ -191,6 +194,45 @@ export class BaseStore implements Store {
 
     has(key: string): boolean {
         return !isUndefined(this.provider.get(key))
+    }
+
+    wave(type: string | Wave, payload?: any): void {
+        if (typeof type === "string") {
+            for (const child of this.children) {
+                const wave: Wave = {
+                    type,
+                    payload,
+                    source: this,
+                    blockWave: false,
+                }
+
+                child.dispatchWave(wave);
+
+                if (!wave.blockWave) {
+                    child.wave(wave);
+                }
+            }
+        } else {
+            for (const child of this.children) {
+                child.dispatchWave(type);
+
+                if (!type.blockWave) {
+                    child.wave(type);
+                }
+            }
+        }
+    }
+
+    dispatchWave(wave: Wave) {
+        this.waveObservers.forEach(fn => fn(wave));
+    }
+
+    observeWave(observer: WaveObserver) {
+        this.waveObservers.push(observer);
+
+        return () => {
+            this.waveObservers = this.waveObservers.filter(pred => pred != observer);
+        };
     }
 
     clone(): Store {
