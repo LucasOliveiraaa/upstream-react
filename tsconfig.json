@@ -3,6 +3,7 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "declarationDir": "dist",
+    "rootDir": "./src",
     "esModuleInterop": true,
     "lib": ["dom", "dom.iterable", "esnext"],
     "jsx": "react-jsx",
