@@ -1,5 +1,3 @@
-"use client";
-
 import type { UpstreamConfig, HierarchicalStore } from "../types";
 
 export const isWindowDefined = typeof window != "undefined";
@@ -9,31 +7,38 @@ export const isUndefined = (v: unknown): v is undefined => v === undefined;
 export const isNull = (v: unknown): v is null => v === null;
 export const isFunction = (v: unknown): v is (...args: any[]) => any => typeof v === "function";
 
+// Keep in sync with `UpstreamConfig`. Typed so adding a key that doesn't exist fails to compile.
+const CONFIG_KEYS: readonly (keyof UpstreamConfig)[] = [
+    "store",
+    "initialValue",
+    "refetchWhenHidden",
+    "refetchWhenOffline",
+    "fetcher",
+    "transform",
+    "onSuccess",
+    "onWait",
+    "errorRetries",
+    "errorRetryInterval",
+    "onError",
+    "onErrorRetry",
+    "fetchTimeout",
+    "loadingSlowTimeout",
+    "onLoadingSlow",
+    "dedupeTimeSpan",
+    "refetchInterval",
+    "refetchOnFocus",
+    "refetchOnReconnect",
+    "refetchOnMount",
+    "refetchWhenStale",
+    "staleTimeSpan",
+];
+
 export const isConfiguration = (value: any): value is UpstreamConfig => {
     return (
         typeof value === "object" &&
         value !== null &&
-        (
-            "store" in value ||
-            "refetchWhenHidden" in value ||
-            "refetchWhenOffline" in value ||
-            "fetcher" in value ||
-            "onSuccess" in value ||
-            "onWait" in value ||
-            "errorRetries" in value ||
-            "errorRetryInterval" in value ||
-            "onError" in value ||
-            "onErrorRetry" in value ||
-            "fetchTimeout" in value ||
-            "onLoadingSlow" in value ||
-            "dedupeTimeSpan" in value ||
-            "refetchInterval" in value ||
-            "refetchOnFocus" in value ||
-            "refetchOnReconnect" in value ||
-            "refetchOnMount" in value ||
-            "refetchWhenStale" in value ||
-            "staleTimeSpan" in value
-        )
+        !Array.isArray(value) &&
+        CONFIG_KEYS.some(key => key in value)
     );
 }
 
@@ -41,7 +46,6 @@ export const isHierarchicalStore = (value: any): value is HierarchicalStore => {
     return (
         typeof value === "object" &&
         value !== null &&
-        "upstreamUUIDs" in value &&
         value.upstreamUUIDs instanceof Set &&
         "children" in value &&
         Array.isArray(value.children)
@@ -57,7 +61,7 @@ export const clone = (value: any): any => {
 
     if (Object(value) === value) {
         if (Array.isArray(value)) {
-            let result = []
+            const result = []
             for (const v of value) {
                 result.push(clone(v));
             }
@@ -65,7 +69,7 @@ export const clone = (value: any): any => {
         }
 
         if (isObject) {
-            let result: { [key: string]: any } = {}
+            const result: { [key: string]: any } = {}
             for (const v in value) {
                 result[v] = clone(value[v]);
             }

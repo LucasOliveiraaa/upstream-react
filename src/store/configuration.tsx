@@ -1,9 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo } from "react";
-import type { UpstreamConfig } from "../types";
-import { isFunction } from "../utils/helpers";
-import { globalStore } from "./globalStore";
+import React, { createContext, useContext, useMemo } from "react";
+import type { UpstreamConfig } from "../core/types";
+import { globalStore, isFunction } from "../core";
 
 export const UpstreamProviderContext = createContext<UpstreamConfig>({ store: globalStore });
 
@@ -12,7 +11,14 @@ export interface UpstreamProviderProps {
     children: React.ReactNode
 }
 
-const merge = (a: any, b?: any) => ({ ...a, ...b });
+// `undefined` values never override, so `{ store: undefined }` keeps the parent's store
+const merge = (a: any, b?: any) => {
+    const result = { ...a };
+    for (const key in b) {
+        if (b[key] !== undefined) result[key] = b[key];
+    }
+    return result;
+};
 
 export function UpstreamProvider({ config: _config, children }: UpstreamProviderProps) {
     const parentConfig = useContext(UpstreamProviderContext);
@@ -30,7 +36,7 @@ export function UpstreamProvider({ config: _config, children }: UpstreamProvider
     </UpstreamProviderContext.Provider>
 }
 
-export function useUpstreamConfig(_config?: UpstreamConfig) {
+export function useUpstreamConfig(_config?: UpstreamConfig): UpstreamConfig {
     const parentConfig = useContext(UpstreamProviderContext);
 
     const config = useMemo<UpstreamConfig>(

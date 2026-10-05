@@ -1,4 +1,6 @@
 export type MutationObserver = (value: any, prev: any) => void;
+/** Observes every change in a store, see {@link Store.observe} */
+export type StoreObserver = (key: string, value: any, prev: any) => void;
 export type Unsubscriber = () => void;
 export type Subscriber = (key: string, callback: MutationObserver) => Unsubscriber;
 
@@ -6,6 +8,7 @@ export enum EventTypes {
     Focus = "focus",
     Reconnect = "reconnect",
     WindowSync = "window-sync",
+    Revalidate = "revalidate",
 }
 
 export type EventHandlerCallback = (type: EventTypes, ...args: any[]) => void
@@ -27,13 +30,18 @@ export interface Wave {
 export type WaveObserver = (wave: Wave) => void;
 
 export interface Store {
-    fetches: Record<string, [FetcherResponse<any>, number]>;
+    fetches: Record<string, [Promise<any>, number, AbortController?]>;
 
     UUID: string;
     name: string;
 
     config: StoreConfig;
     parent?: Store;
+    /**
+     * Read-only stores searched, in order, for keys this store and its
+     * {@link Store.parent} don't have. See {@link ExtendedStoreConfig.parents}.
+     */
+    parents: Store[];
 
     get<T>(key: string): T | undefined;
     
@@ -41,6 +49,7 @@ export interface Store {
     setAndDontNotify<T>(key: string, value: T): T | undefined;
 
     delete(key: string): void;
+    has(key: string): boolean;
 
     wave(type: string, payload: any): void;
     wave(wave: Wave): void;
@@ -52,27 +61,57 @@ export interface Store {
     diverge(config?: ExtendedStoreConfig): Store;
 
     subscribe(key: string, callback: MutationObserver): Unsubscriber;
+    /** Observes changes of every key, including inherited ones */
+    observe(observer: StoreObserver): Unsubscriber;
+    /**
+     * Notifies subscribers of `key` that its value changed, without writing.
+     * Used by stores whose provider can change on its own (e.g. other tabs).
+     */
+    notify(key: string, value: any, prev: any): void;
 
     subscribeHandler(key: string, handler: EventHandlerCallback): () => void;
     notifyHandlers(key: string, type: EventTypes, ...args: any[]): void;
 
     serialize(): string;
+
+    /** Registers this store as a child of its parent (idempotent) */
+    attach(): void;
+    /** Unregisters this store from its parent's children */
+    detach(): void;
+    /** Detaches the store and removes every listener it owns */
+    dispose(): void;
 }
 
 export type HierarchicalStore = Store & {
-    upstreamUUIDs: Set<string>;
+    readonly upstreamUUIDs: Set<string>;
     children: Store[];
 };
 
 export type Refetcher<T> = () => Promise<T | undefined>;
 
+/** Config with a {@link UpstreamConfig.transform} from the fetcher's data `R` to the stored `T` */
+export type TransformConfig<T, E, R> = Omit<UpstreamConfig<T, E>, "transform" | "fetcher"> & {
+    transform: (data: R, key: string) => T,
+};
+
+/** The data type a fetcher resolves to */
+export type FetchedData<F> = F extends (...args: any[]) => infer R ? Awaited<R> : never;
+
 export interface UpstreamHook {
+    <R, T, E = any>(key: Key, fetcher: Fetcher<R>, config: TransformConfig<T, E, R>): UpstreamResponse<T, E>,
+    // Generic over the whole fetcher so inference doesn't fall through to the
+    // `initialValue` overloads: when several overloads match, TypeScript first
+    // picks one whose parameters match *exactly* (subtype relation), and
+    // `(url: string) => ...` isn't a subtype of `Fetcher<T>` (key: any).
+    <F extends Fetcher<any>, E = any>(key: Key, fetcher: F): UpstreamResponse<FetchedData<F>, E>,
+    <F extends Fetcher<any>, E = any>(key: Key, fetcher: F, config: UpstreamConfig<FetchedData<F>, E>): UpstreamResponse<FetchedData<F>, E>,
     <T = any, E = any>(key: Key): UpstreamResponse<T, E>,
-    <T = any, E = any>(key: Key, config: UpstreamConfig): UpstreamResponse<T, E>,
-    <T = any, E = any>(key: Key, initialValue: T): UpstreamResponse<T, E>,
-    <T = any, E = any>(key: Key, initialValue: T, config: UpstreamConfig): UpstreamResponse<T, E>,
+    // For explicit type arguments: useUpstream<User>(key, fetcher)
     <T = any, E = any>(key: Key, fetcher: Fetcher<T>): UpstreamResponse<T, E>,
-    <T = any, E = any>(key: Key, fetcher: Fetcher<T>, config: UpstreamConfig): UpstreamResponse<T, E>,
+    <T = any, E = any>(key: Key, fetcher: Fetcher<T>, config: UpstreamConfig<T, E>): UpstreamResponse<T, E>,
+    <T = any, E = any>(key: Key, config: UpstreamConfig<T, E>): UpstreamResponse<T, E>,
+    <T = any, E = any>(key: Key, initialValue: T): UpstreamResponse<T, E>,
+    <T = any, E = any>(key: Key, initialValue: T, config: UpstreamConfig<T, E>): UpstreamResponse<T, E>,
 }
 
 export type UpstreamResponse<T = any, E = any> = [
@@ -94,11 +133,20 @@ export type UpstreamResponse<T = any, E = any> = [
 export type SetActionArg<T> = T | ((prev: T | undefined) => T | undefined);
 export type SetAction<T> = (newValue?: SetActionArg<T>) => void;
 
-export type Arg = string | any[] | object | false | null;
+export type Arg = string | any[] | object | false | null | undefined;
 export type Key = (() => Arg) | Arg;
 
 export type FetcherResponse<T> = T | Promise<T>
-export type Fetcher<T = any> = (key: Arg) => FetcherResponse<T>;
+
+export interface FetcherOptions {
+    /**
+     * Aborted when the request times out (see {@link UpstreamConfig.fetchTimeout})
+     * or is superseded by a newer request for the same key.
+     */
+    signal: AbortSignal | undefined;
+}
+
+export type Fetcher<T = any> = (key: any, options: FetcherOptions) => FetcherResponse<T>;
 
 /**
  * Configuration options for {@link useUpstream}, controlling how data is fetched,
@@ -119,6 +167,20 @@ export interface UpstreamConfig<T = any, E = any> {
      * ```
      */
     store?: Store;
+
+    /**
+     * Initial value for the key, written to the store if it's empty.
+     * Same as passing it as the second argument, but unambiguous for
+     * values that are functions or look like a config object.
+     *
+     * Only read from the config passed to the hook, never from an {@link UpstreamProvider}.
+     *
+     * @example
+     * ```ts
+     * const [filters] = useUpstream("filters", { initialValue: { store: "all" } });
+     * ```
+     */
+    initialValue?: T;
 
     /**
      * When `true`, forces data to be re-fetched when the page is hidden
@@ -147,26 +209,39 @@ export interface UpstreamConfig<T = any, E = any> {
     /**
      * The function used to fetch data for this key.
      *
-     * The function receives the parsed key (often a URL or tuple)
-     * and should return a Promise resolving to the data.
+     * The function receives the parsed key (often a URL or tuple) and an
+     * options object with an `AbortSignal`, and should return a Promise
+     * resolving to the data.
      *
      * @example
      * ```ts
-     * const fetcher = (url: string) => fetch(url).then(res => res.json());
+     * const fetcher = (url: string, { signal }) => fetch(url, { signal }).then(res => res.json());
      * const [data] = useUpstream("/api/user", { fetcher });
      * ```
      */
     fetcher?: Fetcher<T>;
 
     /**
-     * Called after a successful fetch or data update.
+     * Transforms fetched data before it's written to the store.
      *
-     * Can be used to perform side effects such as logging or state synchronization.
+     * @example
+     * ```ts
+     * const [names] = useUpstream("/api/users", fetcher, {
+     *   transform: (users) => users.map(u => u.name),
+     * });
+     * ```
+     */
+    transform?: (data: any, key: string) => T;
+
+    /**
+     * Called after a successful fetch, with the (transformed) data.
      *
-     * @param {T} data - The successfully fetched or updated data.
+     * Its return value is ignored, use {@link transform} to change the data.
+     *
+     * @param {T} data - The successfully fetched data.
      * @param {string} key - The associated store key.
      */
-    onSuccess?: (data: T, key: string) => any;
+    onSuccess?: (data: T, key: string) => void;
 
     /**
      * Called when a fetch request for the same key is already in progress
@@ -201,14 +276,15 @@ export interface UpstreamConfig<T = any, E = any> {
     errorRetryInterval?: number;
 
     /**
-     * Called when a fetch operation throws an error.
+     * Called when a fetch operation fails after every retry.
      *
      * Useful for centralized error handling or notifications.
+     * Its return value is ignored.
      *
      * @param {E} error - The error that occurred.
      * @param {string} key - The store key associated with the error.
      */
-    onError?: (error: E, key: string) => any;
+    onError?: (error: E, key: string) => void;
 
     /**
      * Called before retrying a failed fetch operation.
@@ -224,6 +300,9 @@ export interface UpstreamConfig<T = any, E = any> {
     /**
      * Maximum duration (in milliseconds) before a fetch request times out.
      *
+     * On timeout the fetcher's `signal` is aborted and the request fails
+     * with a `TimeoutError` (retries still apply).
+     *
      * @default undefined (no timeout)
      *
      * @example
@@ -234,7 +313,15 @@ export interface UpstreamConfig<T = any, E = any> {
     fetchTimeout?: number;
 
     /**
-     * Called when fetcher takes more than defined in `fetchTimeout`
+     * Time in milliseconds after which a pending fetch is considered slow
+     * and {@link onLoadingSlow} is called.
+     *
+     * @default fetchTimeout
+     */
+    loadingSlowTimeout?: number;
+
+    /**
+     * Called when the fetcher takes longer than `loadingSlowTimeout`
      *
      * @param {string} key - The store key being slow.
      */
@@ -266,7 +353,8 @@ export interface UpstreamConfig<T = any, E = any> {
     refetchInterval?: number;
 
     /**
-     * When `true`, automatically refetches data when the browser window regains focus.
+     * When `true`, automatically refetches data when the browser window regains focus
+     * (or the page becomes visible again).
      *
      * @default true
      */
@@ -290,7 +378,7 @@ export interface UpstreamConfig<T = any, E = any> {
     /**
      * When `true`, automatically re-fetches stale data based on the configured `staleTimeSpan`.
      *
-     * @default true
+     * @default false
      */
     refetchWhenStale?: boolean;
 
@@ -374,16 +462,18 @@ export interface StoreConfig {
     syncDown?: boolean;
 
     /**
-     * When `true`, automatically disposes (unsubscribes and removes) this store
-     * from the global context when there are no more active MutationObservers.
+     * When `true`, a store created with {@link useStore} is disposed (detached
+     * from its parents, listeners removed) when the component unmounts.
      *
-     * This helps prevent memory leaks in long-lived applications.
+     * Stores created with `createStore` are never disposed automatically,
+     * call `store.dispose()` when you're done with them.
      *
      * @default true
      *
      * @example
      * ```ts
-     * const store = createStore({ autoDispose: true });
+     * // Keep the store attached after the component unmounts
+     * const store = useStore({ autoDispose: false });
      * ```
      */
     autoDispose?: boolean;
@@ -420,6 +510,27 @@ export interface StoreConfig {
      * ```
      */
     onChange?: (key: string, value: any, prev: any | undefined) => void;
+
+    /**
+     * When `true`, keys missing from this store (and its `parent`) are
+     * searched in its lookup {@link ExtendedStoreConfig.parents}, in order.
+     *
+     * @default true
+     */
+    lookupParents?: boolean;
+
+    /**
+     * When `true`, values found in lookup parents stay live: when they change
+     * in the parent, this store's subscribers are notified.
+     *
+     * When `false`, a value found in a lookup parent is copied into this store
+     * the first time it's read, and later changes in the parent are ignored.
+     *
+     * Either way, this store never writes to its lookup parents.
+     *
+     * @default true
+     */
+    syncWithParents?: boolean;
 };
 
 export type ExtendedStoreConfig = StoreConfig & { 
@@ -440,5 +551,55 @@ export type ExtendedStoreConfig = StoreConfig & {
     
     parent?: Store,
 
+    /**
+     * Read-only stores this store looks keys up in, after itself and its
+     * `parent`, in order. Unlike `parent`:
+     *
+     * - this store is never written to them (no `syncUp`),
+     * - this store doesn't become their child (no waves, no `syncDown`),
+     * - they may be isolated stores, and an isolated store may have them.
+     *
+     * Controlled by `lookupParents` and `syncWithParents`.
+     *
+     * @example
+     * ```ts
+     * // Reads app config and user info, but its own writes stay local
+     * const protectedStore = createStore({
+     *   name: "Protected",
+     *   parents: [globalStore, userStore],
+     * });
+     * ```
+     */
+    parents?: Store[],
+
+    /**
+     * A string produced by `store.serialize()`, restoring that store's values,
+     * name and config.
+     */
     initialState?: string,
+
+    /**
+     * Values the store starts with, as `{ key: value }`. String keys are the
+     * same keys `useUpstream` uses, so `{ "/api/me": user }` is read by
+     * `useUpstream("/api/me")`.
+     *
+     * They're only written to this store, not to its parents, even with `syncUp`.
+     * Handy to pass data fetched on the server to a client component.
+     *
+     * @example
+     * ```ts
+     * const store = createStore({ initialValues: { theme: "dark", "/api/me": user } });
+     * ```
+     */
+    initialValues?: Record<string, unknown>,
+};
+
+export type StorageStoreConfig = ExtendedStoreConfig & {
+    /**
+     * Prefix added to every key written to the storage. Only keys with this
+     * prefix belong to the store, so it won't list or serialize foreign entries.
+     *
+     * @default ""
+     */
+    prefix?: string,
 };

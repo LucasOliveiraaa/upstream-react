@@ -5,7 +5,7 @@ describe("useUpstream", () => {
     it("returns initial value and updates via setValue", async () => {
         const { result } = renderHook(() => useUpstream("value", "init"));
 
-        let [value] = result.current;
+        const [value] = result.current;
         expect(value).toBe("init");
 
         act(() => {
@@ -24,21 +24,21 @@ describe("useUpstream", () => {
         const { result } = renderHook(() => useUpstream("fetchKey", fetcher));
 
         // Initially value is undefined
-        let [value, , meta] = result.current;
+        const [value, , meta] = result.current;
         expect(value).toBeUndefined();
         expect(meta.isInitial).toBe(true);
 
         // Wait until first fetch completes
         await waitFor(() => {
             const [, , meta] = result.current;
-            return !meta.isInitial;
+            expect(meta.isInitial).toBe(false);
         });
 
         const [fetchedValue, , finalMeta] = result.current;
         expect(fetchedValue).toBe("fetched");
         expect(finalMeta.isFetching).toBe(false);
 
-        expect(fetcher).toHaveBeenCalledWith("fetchKey");
+        expect(fetcher).toHaveBeenCalledWith("fetchKey", { signal: expect.any(AbortSignal) });
     });
 
     it("handles fetcher errors correctly", async () => {
@@ -53,14 +53,14 @@ describe("useUpstream", () => {
         // Wait until first fetch completes
         await waitFor(() => {
             const [, , meta] = result.current;
-            return !meta.isInitial;
+            expect(meta.isInitial).toBe(false);
         });
 
         const [, , meta] = result.current;
         expect(meta.error).toBe(error);
         expect(meta.isFetching).toBe(false);
 
-        expect(onError).toHaveBeenCalledWith(error, '"errorKey"');
+        expect(onError).toHaveBeenCalledWith(error, 'errorKey');
     });
 
     it("can use a custom store", async () => {
@@ -85,7 +85,7 @@ describe("useUpstream", () => {
 
     it("supports diverged stores", async () => {
         const baseStore = createStore({ name: "base" });
-        baseStore.setAndDontNotify('"key1"', "baseValue");
+        baseStore.setAndDontNotify('key1', "baseValue");
 
         const diverged = divergeStore(baseStore);
         const { result } = renderHook(() =>
@@ -106,7 +106,7 @@ describe("useUpstream", () => {
         });
 
         // parent store remains unchanged
-        expect(baseStore.get('"key1"')).toBe("baseValue");
+        expect(baseStore.get('key1')).toBe("baseValue");
     });
 
     it("refetches using refetch function", async () => {
@@ -121,7 +121,7 @@ describe("useUpstream", () => {
         // Wait for initial fetch
         await waitFor(() => {
             const [, , meta] = result.current;
-            return !meta.isInitial
+            expect(meta.isInitial).toBe(false);
         });
 
         const [value] = result.current;

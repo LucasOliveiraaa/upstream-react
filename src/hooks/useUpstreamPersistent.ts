@@ -1,19 +1,35 @@
-import { createStoreFromStorage } from "../store/store";
+"use client";
+
+import { createStore, createStoreFromStorage } from "../core";
+import type { Store } from "../core/types";
 import { hookMiddleware } from "./middleware";
 
-let p;
+let p: Store | undefined;
 
-if (typeof window !== "undefined") {
-    p = createStoreFromStorage(
-        window.localStorage,
-        {
-            name: "Persistent Store",
-            isolate: true
-        }
-    );
+try {
+    if (typeof window !== "undefined" && window.localStorage) {
+        p = createStoreFromStorage(
+            window.localStorage,
+            {
+                name: "Persistent Store",
+                isolate: true,
+                persistent: true,
+            }
+        );
+    }
+} catch {
+    // localStorage can throw when access is denied (e.g. sandboxed iframes)
 }
 
-export const persistentStore = p;
+/**
+ * On the server (or without localStorage) fall back to an isolated in-memory
+ * store so persistent keys never leak into the global store.
+ */
+export const persistentStore: Store = p ?? createStore({
+    name: "Persistent Store",
+    isolate: true,
+    persistent: true,
+});
 
 /**
  * React hook for persistent, localStorage-backed global state in Upstream.
@@ -28,7 +44,7 @@ export const persistentStore = p;
  * ---
  * **Important — Isolation Notice**
  *
- * The underlying `"Global Local Store"` used by this hook is **isolated**:
+ * The underlying `"Persistent Store"` used by this hook is **isolated**:
  *
  * - It **does not inherit** or synchronize data from any parent store.
  * - It **cannot be set as a parent** of any other store.
@@ -50,7 +66,7 @@ export const persistentStore = p;
  *
  * @example
  * // Using a fetcher with persistent caching
- * const [profile, , { bound to custom storesrefetch }] = useUpstreamPersistent<User>(
+ * const [profile, , { refetch }] = useUpstreamPersistent<User>(
  *   "/api/profile",
  *   (url) => fetch(url).then(res => res.json())
  * );

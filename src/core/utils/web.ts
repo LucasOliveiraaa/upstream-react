@@ -1,5 +1,3 @@
-"use client";
-
 import { isDocumentDefined, isNull, isUndefined, isWindowDefined } from "./helpers";
 
 const [connectWindowEvent, disconnectWindowEvent] =
@@ -7,8 +5,8 @@ const [connectWindowEvent, disconnectWindowEvent] =
         ? [window.addEventListener.bind(window), window.removeEventListener.bind(window)]
         : [() => { }, () => { }];
 
-let connected = true;
-export const isConnected = () => connected;
+export const isConnected = () =>
+    typeof navigator === "undefined" || isUndefined(navigator.onLine) || navigator.onLine;
 
 export const isVisible = () => {
     const visibility = isDocumentDefined && document.visibilityState;
@@ -30,36 +28,28 @@ export const listenForFocus = (callback: () => void) => {
 }
 
 export const listenForReconnect = (callback: () => void) => {
-    const handleConnection = () => {
-        const old = connected;
-        connected = true;
-        if (!old) callback();
-    }
-    const handleDisconnection = () => {
-        connected = false;
-    }
-    connectWindowEvent("online", handleConnection);
-    connectWindowEvent("offline", handleDisconnection);
+    connectWindowEvent("online", callback);
 
     return () => {
-        disconnectWindowEvent("online", handleConnection);
-        disconnectWindowEvent("offline", handleDisconnection);
+        disconnectWindowEvent("online", callback);
     }
 }
 
-export const listenForWindowSync = (callback: (key: string, value: any, prev: any | undefined) => void) => {
+export const listenForWindowSync = (
+    storage: Storage,
+    callback: (key: string, value: any, prev: any | undefined) => void
+) => {
     const parseValue = (v: string | null) => {
-        try { return isNull(v) ? undefined : JSON.parse(v); }
-        catch(e) { return undefined; }
+        if (isNull(v)) return undefined;
+        try { return JSON.parse(v); }
+        catch (e) { return v; }
     }
 
     const handleStorage = (event: StorageEvent) => {
-        if(!event.key || !event.newValue) return;
+        // `key` is null when the whole storage was cleared
+        if (!event.key || event.storageArea !== storage) return;
 
-        const value = parseValue(event.newValue);
-        const prev = parseValue(event.oldValue);
-
-        callback(event.key, value, prev);
+        callback(event.key, parseValue(event.newValue), parseValue(event.oldValue));
     }
 
     connectWindowEvent("storage", handleStorage);
